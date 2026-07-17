@@ -1306,13 +1306,21 @@ namespace Bang
 
                 Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> currentNotifications = watcher.PopNotifications();
 
+                // When multiple systems subscribe to the same watcher, each system must receive its own copy
+                // of the notifications. Otherwise, merging another watcher's notifications into one system
+                // would leak entities into systems which never watched those components.
+                bool notificationsAreSharedAcrossSystems = systems.Count > 1;
+
                 // Pass that notification for each system that it targets.
                 foreach (var (systemId, system) in systems)
                 {
                     // Ok, if no previous systems had any notifications, that's easy, just add right away.
                     if (!_systemsToNotify.TryGetValue(systemId, out var notificationsAndSystem))
                     {
-                        _systemsToNotify.Add(systemId, (currentNotifications, system));
+                        var notifications = notificationsAreSharedAcrossSystems ?
+                            CopyNotifications(currentNotifications) : currentNotifications;
+
+                        _systemsToNotify.Add(systemId, (notifications, system));
                         continue;
                     }
 
@@ -1322,7 +1330,8 @@ namespace Bang
                         // If the system did not have this notification previously, that's easy, just add right away then!
                         if (!notificationsAndSystem.Notifications.TryGetValue(kind, out var entities))
                         {
-                            notificationsAndSystem.Notifications.Add(kind, currentEntities);
+                            notificationsAndSystem.Notifications.Add(kind, notificationsAreSharedAcrossSystems ?
+                                new Dictionary<int, Entity>(currentEntities) : currentEntities);
                             continue;
                         }
 
@@ -1434,6 +1443,21 @@ namespace Bang
             {
                 NotifyReactiveSystems();
             }
+        }
+
+        /// <summary>
+        /// Create a copy of <paramref name="notifications"/> which is safe to be mutated for a single system.
+        /// </summary>
+        private static Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> CopyNotifications(
+            Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> notifications)
+        {
+            Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> result = new(notifications.Count);
+            foreach (var (kind, entities) in notifications)
+            {
+                result[kind] = new Dictionary<int, Entity>(entities);
+            }
+
+            return result;
         }
 
         /// <summary>
