@@ -20,8 +20,14 @@ namespace Bang
     {
         /// <summary>
         /// Use this to set whether diagnostics should be pulled from the world run.
+        /// Defaults to <see langword="true"/> in Debug builds and <see langword="false"/> in Release builds,
+        /// so shipped games do not pay the per-system stopwatch/counter cost unless they opt in.
         /// </summary>
+#if DEBUG
         public static bool DIAGNOSTICS_MODE = true;
+#else
+        public static bool DIAGNOSTICS_MODE = false;
+#endif
 
         private record struct SystemInfo
         {
