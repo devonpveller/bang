@@ -599,9 +599,11 @@ namespace Bang.Entities
             }
 
             IComponent previousComponent = GetComponentInternal(index);
-            if (!forceReplace && c is not IDoNotCheckOnReplaceTag && c.Equals(previousComponent))
+            if (!forceReplace && c is not IDoNotCheckOnReplaceTag &&
+                previousComponent is T previousValue && EqualityComparer<T>.Default.Equals(c, previousValue))
             {
                 // Don't bother replacing if both components have the same value.
+                // EqualityComparer<T> avoids boxing the new value when T implements IEquatable<T>.
                 return false;
             }
 

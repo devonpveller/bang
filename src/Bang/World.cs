@@ -1002,7 +1002,17 @@ namespace Bang
                 }
             }
 
-            return context.Entities.FirstOrDefault(e => !e.IsDestroyed);
+            // Avoid LINQ here: this is the canonical singleton accessor and runs on hot paths.
+            ImmutableArray<Entity> entities = context.Entities;
+            for (int i = 0; i < entities.Length; ++i)
+            {
+                if (!entities[i].IsDestroyed)
+                {
+                    return entities[i];
+                }
+            }
+
+            return null;
         }
 
         /// <summary>
