@@ -387,6 +387,12 @@ namespace Bang.StateMachines
             }
 
             Entity.OnMessage -= OnMessageSent;
+
+            // If we were waiting on another entity's message (Wait.ForMessage(target)), we are also
+            // subscribed to that entity. Reset the wait state so the target does not keep a delegate
+            // to this disposed state machine (and never notifies it again).
+            ResetWaitTimeAndMessage();
+
             Routine?.Dispose();
 
             foreach (IEnumerator<Wait> r in _routinesOnWait)
