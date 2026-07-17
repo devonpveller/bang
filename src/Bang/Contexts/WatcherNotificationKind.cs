@@ -2,7 +2,8 @@
 {
     /// <summary>
     /// When a system is watching for a component, this is the kind of notification currently fired.
-    /// The order of the enumerator dictates the order that these will be called on the watcher systems.
+    /// Notifications are dispatched to watcher systems in *descending* order of this enumerator,
+    /// so that removals are notified before additions within the same frame.
     /// </summary>
     public enum WatcherNotificationKind
     {
