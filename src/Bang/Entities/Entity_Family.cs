@@ -373,8 +373,8 @@ namespace Bang.Entities
 
             _parent.OnEntityDestroyed -= Destroy;
 
-            _parent.OnEntityActivated -= OnEntityActivated;
-            _parent.OnEntityDeactivated -= OnEntityDeactivated;
+            _parent.OnEntityActivated -= ActivateFromParent;
+            _parent.OnEntityDeactivated -= DeactivateFromParent;
 
             _parent.RemoveChild(EntityId);
 
