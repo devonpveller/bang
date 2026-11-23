@@ -87,6 +87,19 @@ public static class Diagnostics
             public const string Id = "BANG2004";
             public const string Message = "Unique attribute must be used only on components, state machines and interactions";
         }
+
+        public static class NonCompliantComponentsOnFilterAttribute
+        {
+            public const string Id = "BANG2005";
+            public const string Message = "Filter attribute expects components which can be tracked";
+        }
+
+
+        public static class NonCompliantComponentsOnWatchAttribute
+        {
+            public const string Id = "BANG2006";
+            public const string Message = "Watch attribute expects components which can be tracked";
+        }
     }
 
     public static class Messages

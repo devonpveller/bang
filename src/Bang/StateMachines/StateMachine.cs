@@ -118,6 +118,9 @@ namespace Bang.StateMachines
         /// </summary>
         protected virtual bool PersistStateOnSave => true;
 
+        // [Perf]
+        private Action<Entity, int, IMessage>? _onMessageSentCache = null;
+
         /// <summary>
         /// Initialize the state machine. 
         /// Should only be called by the entity itself when it is registered in the world.
@@ -139,6 +142,8 @@ namespace Bang.StateMachines
                     State(@delegate);
                 }
             }
+
+            _onMessageSentCache = OnMessageSent;
         }
 
         private Func<IEnumerator<Wait>>? TryFetchDelegateForPersistedState(string state)
@@ -258,7 +263,7 @@ namespace Bang.StateMachines
                     if (r.Target is not null)
                     {
                         _waitForMessageTarget = r.Target;
-                        target.OnMessage += OnMessageSent;
+                        target.OnMessage += _onMessageSentCache;
                     }
                     else
                     {
@@ -386,7 +391,7 @@ namespace Bang.StateMachines
                 return;
             }
 
-            Entity.OnMessage -= OnMessageSent;
+            Entity.OnMessage -= _onMessageSentCache;
 
             // If we were waiting on another entity's message (Wait.ForMessage(target)), we are also
             // subscribed to that entity. Reset the wait state so the target does not keep a delegate
@@ -411,12 +416,12 @@ namespace Bang.StateMachines
 
         public void Subscribe()
         {
-            Entity.OnMessage += OnMessageSent;
+            Entity.OnMessage += _onMessageSentCache;
         }
 
         public void Unsubscribe()
         {
-            Entity.OnMessage -= OnMessageSent;
+            Entity.OnMessage -= _onMessageSentCache;
         }
 
         /// <summary>
@@ -540,7 +545,7 @@ namespace Bang.StateMachines
 
             if (_waitForMessageTarget is not null)
             {
-                _waitForMessageTarget.OnMessage -= OnMessageSent;
+                _waitForMessageTarget.OnMessage -= _onMessageSentCache;
                 _waitForMessageTarget = null;
             }
         }
@@ -558,7 +563,7 @@ namespace Bang.StateMachines
 
             if (_waitForMessageTarget is not null)
             {
-                _waitForMessageTarget.OnMessage -= OnMessageSent;
+                _waitForMessageTarget.OnMessage -= _onMessageSentCache;
                 _waitForMessageTarget = null;
             }
         }

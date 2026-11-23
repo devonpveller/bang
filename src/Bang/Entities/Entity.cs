@@ -729,8 +729,7 @@ namespace Bang.Entities
             (c as IStateMachineComponent)?.Initialize(_world, this);
             (c as IModifiableComponent)?.Subscribe(GetModifiableComponentCallback(index));
 
-            // skip any further notifications if this tag is in place.
-            if (c is IDoNotCheckOnReplaceTag)
+            if (c is IDoNotTrackMeTag)
             {
                 return;
             }
@@ -869,6 +868,9 @@ namespace Bang.Entities
             {
                 AddChild(id, name);
             }
+
+            // no longer persist messages either.
+            ClearMessages();
         }
 
         /// <summary>

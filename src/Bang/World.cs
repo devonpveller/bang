@@ -220,6 +220,9 @@ namespace Bang
         /// </summary>
         internal readonly ComponentsLookup ComponentsLookup;
 
+        // [Perf] Called when an entity is destroyed.
+        private readonly Action<int> _registerToRemoveCache;
+
         /// <summary>
         /// Initialize the world!
         /// </summary>
@@ -227,11 +230,6 @@ namespace Bang
         /// <exception cref="ArgumentException">If no systems are passed to the world.</exception>
         public World(IList<(ISystem system, bool isActive)> systems)
         {
-            if (systems.Count == 0)
-            {
-                throw new ArgumentException("Cannot create a world without any systems.");
-            }
-
             ComponentsLookup = FindLookupImplementation();
 
             var watchBuilder = ImmutableDictionary.CreateBuilder<int, (ComponentWatcher Watcher, SortedList<int, IReactiveSystem> Systems)>();
@@ -339,6 +337,8 @@ namespace Bang
                 CheckSystemsRequirements(systems);
                 InitializeDiagnosticsCounters();
             }
+
+            _registerToRemoveCache = RegisterToRemove;
         }
 
         /// <summary>
@@ -377,7 +377,7 @@ namespace Bang
             _entities[entity.EntityId] = entity;
 
             // Track end of the entity lifetime.
-            entity.OnEntityDestroyed += RegisterToRemove;
+            entity.OnEntityDestroyed += _registerToRemoveCache;
 
             // Filter the entity across all active contexts.
             foreach (var (_, context) in Contexts)
@@ -636,6 +636,30 @@ namespace Bang
         }
 
         /// <summary>
+        /// Activate a system whenever a pause operation resumes.
+        /// If world is not paused, same as <see cref="ActivateSystem{T}()"/>.
+        /// </summary>
+        public bool QueueActivateAfterResume<T>()
+        {
+            if (!_typeToSystems.TryGetValue(typeof(T), out int id))
+            {
+                // Most likely the system is simply not available.
+                return false;
+            }
+
+            if (IsPaused)
+            {
+                _systemsToResume.Add(id);
+
+                return true;
+            }
+            else
+            {
+                return ActivateSystem(id);
+            }
+        }
+
+        /// <summary>
         /// Activate a system of type <paramref name="t"/> within our world.
         /// </summary>
         /// <returns>
@@ -676,6 +700,8 @@ namespace Bang
         /// <summary>
         /// Pause all the set of systems that qualify in <see cref="IsPauseSystem"/>.
         /// A paused system will no longer be called on any <see cref="Update"/> calls.
+        /// YOU SHOULD BE VERY CAREFUL WHEN CALLING THIS. I assume you know what you're doing.
+        /// Ideally, you should have a context-aware wrapper that cleans this up on descrution.
         /// </summary>
         public virtual void Pause()
         {
@@ -1267,12 +1293,12 @@ namespace Bang
         /// [System ID] => ([Notification => Entities], System)
         /// This is so we can track any duplicate entities reported for watchers of multiple components.
         /// </summary>
-        private readonly Dictionary<int, (Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> Notifications, IReactiveSystem System)> _systemsToNotify = [];
+        private readonly Dictionary<int, (Dictionary<WatcherNotificationKind, ImmutableArray<Entity>> Notifications, IReactiveSystem System)> _systemsToNotify = [];
 
         /// <summary>
         /// Same as <see cref="_systemsToNotify"/>, but ordered once the data is collected.
         /// </summary>
-        private readonly SortedList<int, (Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> Notifications, IReactiveSystem System)> _orderedSystemsToNotify = [];
+        private readonly SortedList<int, (Dictionary<WatcherNotificationKind, ImmutableArray<Entity>> Notifications, IReactiveSystem System)> _orderedSystemsToNotify = [];
 
         // This is used when DIAGNOSTICS_MODE is set to update reactive systems that were
         // not triggered.
@@ -1281,7 +1307,10 @@ namespace Bang
         /// <summary>
         /// Reuse the same instance for ordering the notifications per system.
         /// </summary>
-        private readonly SortedList<WatcherNotificationKind, Dictionary<int, Entity>> _orderedNotificationsPerSystem = new(DescendingWatcherNotificationKindComparer.Instance);
+        private readonly SortedList<WatcherNotificationKind, ImmutableArray<Entity>> _orderedNotificationsPerSystem = new(DescendingWatcherNotificationKindComparer.Instance);
+
+        private record SystemIdWatcherKind(int SystemId, WatcherNotificationKind WatcherKind);
+        private readonly Dictionary<SystemIdWatcherKind, HashSet<int>> _cacheTriggeredEntities = [];
 
         /// <summary>
         /// Notify all reactive systems of any change that happened during the update.
@@ -1315,12 +1344,13 @@ namespace Bang
             _systemsToNotify.Clear();
             _orderedSystemsToNotify.Clear();
 
+            _cacheTriggeredEntities.Clear();
+
             // First, iterate over each watcher and clean up their notification queue.
             foreach (int watcherId in watchersTriggered)
             {
                 var (watcher, systems) = _watchers[watcherId];
-
-                Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> currentNotifications = watcher.PopNotifications();
+                Dictionary<WatcherNotificationKind, ImmutableArray<Entity>> currentNotifications = watcher.PopNotifications();
 
                 // When multiple systems subscribe to the same watcher, each system must receive its own copy
                 // of the notifications. Otherwise, merging another watcher's notifications into one system
@@ -1346,16 +1376,40 @@ namespace Bang
                         // If the system did not have this notification previously, that's easy, just add right away then!
                         if (!notificationsAndSystem.Notifications.TryGetValue(kind, out var entities))
                         {
-                            notificationsAndSystem.Notifications.Add(kind, notificationsAreSharedAcrossSystems ?
-                                new Dictionary<int, Entity>(currentEntities) : currentEntities);
+                            notificationsAndSystem.Notifications.Add(kind, currentEntities);
                             continue;
                         }
 
                         // Uh-oh, we got a conflicting notification kind. Merge them into the entities for the notification.
-                        foreach (var (entityId, entity) in currentEntities)
+                        // Honestly, this should be so rare that I am okay creating this on the fly, when necessary.
+
+                        SystemIdWatcherKind key = new(systemId, kind);
+                        if (!_cacheTriggeredEntities.TryGetValue(key, out HashSet<int>? previousEntities))
                         {
-                            entities.TryAdd(entityId, entity);
+                            // start by building the cache...
+                            previousEntities = [];
+
+                            foreach (Entity e in entities)
+                            {
+                                previousEntities.Add(e.EntityId);
+                            }
+
+                            _cacheTriggeredEntities[key] = previousEntities;
                         }
+
+                        foreach (Entity e in currentEntities)
+                        {
+                            if (previousEntities.Contains(e.EntityId))
+                            {
+                                continue;
+                            }
+
+                            entities = entities.Add(e);
+                            previousEntities.Add(e.EntityId);
+                        }
+
+                        // update the reference
+                        notificationsAndSystem.Notifications[kind] = entities;
                     }
                 }
             }
@@ -1393,16 +1447,14 @@ namespace Bang
                     _orderedNotificationsPerSystem.Add(kind, entities);
                 }
 
-                foreach (var (kind, entities) in _orderedNotificationsPerSystem)
+                foreach (var (kind, entitiesInput) in _orderedNotificationsPerSystem)
                 {
-                    if (entities.Count == 0)
+                    if (entitiesInput.Length == 0)
                     {
-                        // This might happen if all the entities were destroyed and no longer relevante to be passed on.
+                        // This might happen if all the entities were destroyed and no longer relevant to be passed on.
                         // Skip notifying in such cases.
                         continue;
                     }
-
-                    ImmutableArray<Entity> entitiesInput = [.. entities.Values];
 
                     switch (kind)
                     {
@@ -1437,7 +1489,7 @@ namespace Bang
                     _stopwatch.Stop();
 
                     ReactiveCounters[systemId].Update(
-                        _stopwatch.Elapsed.TotalMicroseconds, totalEntities: notificationsAndSystem.Notifications.Sum(n => n.Value.Count));
+                        _stopwatch.Elapsed.TotalMicroseconds, totalEntities: notificationsAndSystem.Notifications.Sum(n => n.Value.Length));
 
                     _reactiveTriggeredSystems.Add(systemId);
                 }
@@ -1464,16 +1516,10 @@ namespace Bang
         /// <summary>
         /// Create a copy of <paramref name="notifications"/> which is safe to be mutated for a single system.
         /// </summary>
-        private static Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> CopyNotifications(
-            Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> notifications)
+        private static Dictionary<WatcherNotificationKind, ImmutableArray<Entity>> CopyNotifications(
+            Dictionary<WatcherNotificationKind, ImmutableArray<Entity>> notifications)
         {
-            Dictionary<WatcherNotificationKind, Dictionary<int, Entity>> result = new(notifications.Count);
-            foreach (var (kind, entities) in notifications)
-            {
-                result[kind] = new Dictionary<int, Entity>(entities);
-            }
-
-            return result;
+            return new(notifications);
         }
 
         /// <summary>
@@ -1498,6 +1544,11 @@ namespace Bang
                 if (_entities.TryGetValue(entityId, out Entity? e))
                 {
                     // This will make sure that the entity has not been deleted.
+                    e.ClearMessages();
+                }
+                else if (_deactivatedEntities.TryGetValue(entityId, out e))
+                {
+                    // make sure we also clean from entities which were deactivated!
                     e.ClearMessages();
                 }
             }

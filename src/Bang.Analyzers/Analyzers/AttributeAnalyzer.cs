@@ -50,11 +50,33 @@ public sealed class AttributeAnalyzer : DiagnosticAnalyzer
         description: "Unique attribute must annotate only IComponents, StateMachines and IInteractions."
     );
 
+    public static readonly DiagnosticDescriptor NonCompliantComponentsOnFilterAttribute = new(
+        id: Diagnostics.Attributes.NonCompliantComponentsOnFilterAttribute.Id,
+        title: nameof(AttributeAnalyzer) + "." + nameof(NonCompliantComponentsOnFilterAttribute),
+        messageFormat: Diagnostics.Attributes.NonCompliantComponentsOnFilterAttribute.Message,
+        category: "Usage",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: $"Types in Filter attribute must not implement IDoNotTrackMeTag."
+    );
+
+    public static readonly DiagnosticDescriptor NonCompliantComponentsOnWatchAttribute = new(
+        id: Diagnostics.Attributes.NonCompliantComponentsOnWatchAttribute.Id,
+        title: nameof(AttributeAnalyzer) + "." + nameof(NonCompliantComponentsOnWatchAttribute),
+        messageFormat: Diagnostics.Attributes.NonCompliantComponentsOnWatchAttribute.Message,
+        category: "Usage",
+        defaultSeverity: DiagnosticSeverity.Error,
+        isEnabledByDefault: true,
+        description: "Types in Watch attribute must not implement IDoNotTrackMeTag."
+    );
+
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics => ImmutableArray.Create(
         NonComponentsOnFilterAttribute,
         NonMessagesOnMessagerAttribute,
         NonComponentsOnWatchAttribute,
-        NonApplicableUniqueAttribute
+        NonApplicableUniqueAttribute,
+        NonCompliantComponentsOnFilterAttribute,
+        NonCompliantComponentsOnWatchAttribute
     );
 
     public override void Initialize(AnalysisContext context)
@@ -90,29 +112,44 @@ public sealed class AttributeAnalyzer : DiagnosticAnalyzer
         if (diagnosticInfo is null)
             return;
 
-        var (interfaceThatMustBeImplemented, diagnosticDescriptor) = diagnosticInfo.Value;
+        var (interfaceThatMustBeImplemented, interfaceMustBeImplementedDescriptor) = diagnosticInfo.Value;
 
-        var offendingArguments = argumentList.Arguments.Where(argument =>
+        // optional
+        var (cannotImplementInterface, cannotImplementInterfaceDescriptor) = GetInterfaceThatMustNotBeImplemented(context, attributeClass);
+
+        foreach (AttributeArgumentSyntax argument in argumentList.Arguments)
         {
             // If the argument is not a type of expression we don't need to check it.
             if (argument.Expression is not TypeOfExpressionSyntax typeOfExpression)
-                return false;
+            {
+                continue;
+            }
 
             if (context.SemanticModel.GetSymbolInfo(typeOfExpression.Type).Symbol is not ITypeSymbol typeSymbol)
-                return false;
+            {
+                continue;
+            }
 
-            // If the type passed does not implement the relevant interface it's a violation.
-            return !typeSymbol.ImplementsInterface(interfaceThatMustBeImplemented);
-        });
+            if (cannotImplementInterfaceDescriptor is not null && cannotImplementInterface is not null && 
+                typeSymbol.ImplementsInterface(cannotImplementInterface))
+            {
+                context.ReportDiagnostic(
+                    Diagnostic.Create(
+                        cannotImplementInterfaceDescriptor,
+                        argument.GetLocation()
+                    )
+                );
+            }
 
-        foreach (var offense in offendingArguments)
-        {
-            context.ReportDiagnostic(
-                Diagnostic.Create(
-                    diagnosticDescriptor,
-                    offense.GetLocation()
-                )
-            );
+            if (!typeSymbol.ImplementsInterface(interfaceThatMustBeImplemented))
+            {
+                context.ReportDiagnostic(
+                    Diagnostic.Create(
+                        interfaceMustBeImplementedDescriptor,
+                        argument.GetLocation()
+                    )
+                );
+            }
         }
     }
 
@@ -192,8 +229,7 @@ public sealed class AttributeAnalyzer : DiagnosticAnalyzer
 
     private static (INamedTypeSymbol, DiagnosticDescriptor)? GetInterfaceThatMustBeImplemented(
         SyntaxNodeAnalysisContext context,
-        ISymbol attributeClass
-    )
+        ISymbol attributeClass)
     {
         // Checks for FilterAttribute
         var filterAttribute = context.Compilation.GetTypeByMetadataName(TypeMetadataNames.FilterAttribute);
@@ -220,5 +256,34 @@ public sealed class AttributeAnalyzer : DiagnosticAnalyzer
         }
 
         return null;
+    }
+
+    private static (INamedTypeSymbol?, DiagnosticDescriptor?) GetInterfaceThatMustNotBeImplemented(
+        SyntaxNodeAnalysisContext context,
+        ISymbol attributeClass)
+    {
+        // Checks for FilterAttribute
+        var filterAttribute = context.Compilation.GetTypeByMetadataName(TypeMetadataNames.FilterAttribute);
+        if (attributeClass.Equals(filterAttribute, SymbolEqualityComparer.IncludeNullability))
+        {
+            var interfaceToImplement = context.Compilation.GetTypeByMetadataName(TypeMetadataNames.DoNotTrackMeTagInterface);
+            if (interfaceToImplement is not null)
+            {
+                return (interfaceToImplement, NonCompliantComponentsOnFilterAttribute);
+            }
+        }
+
+        // Checks for WatchAttribute
+        var watchAttribute = context.Compilation.GetTypeByMetadataName(TypeMetadataNames.WatchAttribute);
+        if (attributeClass.Equals(watchAttribute, SymbolEqualityComparer.IncludeNullability))
+        {
+            var interfaceToImplement = context.Compilation.GetTypeByMetadataName(TypeMetadataNames.DoNotTrackMeTagInterface);
+            if (interfaceToImplement is not null)
+            {
+                return (interfaceToImplement, NonCompliantComponentsOnWatchAttribute);
+            }
+        }
+
+        return (null, null);
     }
 }
