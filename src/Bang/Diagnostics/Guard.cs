@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Runtime.CompilerServices;
+using System.Text;
 
 namespace Bang.Diagnostics
 {
@@ -26,12 +27,55 @@ namespace Bang.Diagnostics
         {
             if (!condition)
             {
-                string full = $"[Bang] {caller}: {message}";
-                Trace.TraceError(full);
-                OnViolation?.Invoke(full);
+                Report(caller, message);
             }
 
             return condition;
         }
+
+        /// <summary>
+        /// Same as <see cref="Check(bool, string, string?)"/>, but an interpolated message is only
+        /// formatted when the check fails, so the passing path never allocates.
+        /// </summary>
+        public static bool Check(
+            bool condition,
+            [InterpolatedStringHandlerArgument("condition")] ref GuardMessageHandler message,
+            [CallerMemberName] string? caller = null)
+        {
+            if (!condition)
+            {
+                Report(caller, message.ToStringAndClear());
+            }
+
+            return condition;
+        }
+
+        private static void Report(string? caller, string message)
+        {
+            string full = $"[Bang] {caller}: {message}";
+            Trace.TraceError(full);
+            OnViolation?.Invoke(full);
+        }
+    }
+
+    /// <summary>
+    /// Interpolated string handler that does no work unless the guarded condition failed.
+    /// </summary>
+    [InterpolatedStringHandler]
+    public ref struct GuardMessageHandler
+    {
+        private readonly StringBuilder? _builder;
+
+        public GuardMessageHandler(int literalLength, int formattedCount, bool condition, out bool shouldAppend)
+        {
+            shouldAppend = !condition;
+            _builder = shouldAppend ? new StringBuilder(literalLength) : null;
+        }
+
+        public void AppendLiteral(string value) => _builder!.Append(value);
+
+        public void AppendFormatted<T>(T value) => _builder!.Append(value);
+
+        internal string ToStringAndClear() => _builder?.ToString() ?? string.Empty;
     }
 }
