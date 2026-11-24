@@ -166,11 +166,6 @@ namespace Bang.Entities
         /// <param name="name">Name of the child (if none, null).</param>
         public void AddChild(int id, string? name = default)
         {
-            if (!Guard.Check(_world is not null, "Adding a child to an entity without a world."))
-            {
-                return;
-            }
-
             if (_children is not null && _children.ContainsKey(id))
             {
                 // Child was already added!
@@ -277,11 +272,6 @@ namespace Bang.Entities
         /// </summary>
         public void RemoveChild(int id)
         {
-            if (!Guard.Check(_world is not null, "Removing a child from an entity without a world."))
-            {
-                return;
-            }
-
             if (_children is null)
             {
                 return;
@@ -320,11 +310,6 @@ namespace Bang.Entities
         /// </summary>
         public void Reparent(Entity parent)
         {
-            if (!Guard.Check(_lookup is not null, "Reparenting an entity without a lookup."))
-            {
-                return;
-            }
-
             InitializeFamilyDelegates();
 
             if (parent == _parent)
@@ -377,11 +362,6 @@ namespace Bang.Entities
         /// </summary>
         public void Unparent()
         {
-            if (!Guard.Check(_lookup is not null, "Unparenting an entity without a lookup."))
-            {
-                return;
-            }
-
             InitializeFamilyDelegates();
 
             if (_parent is null) return;
