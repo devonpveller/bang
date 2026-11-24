@@ -1,4 +1,5 @@
 ﻿using Bang.Components;
+using Bang.Diagnostics;
 using Bang.StateMachines;
 using System;
 using System.Collections.Immutable;
@@ -211,10 +212,13 @@ namespace Bang.Entities
                 {
                     foreach (Type requiredType in requires.Types)
                     {
-                        int requiredId = _lookup.Id(requiredType);
+                        if (!Guard.Check(typeof(IComponent).IsAssignableFrom(requiredType),
+                            $"{t.Name} requires {requiredType.Name}, which is not a component."))
+                        {
+                            continue;
+                        }
 
-                        Debug.Assert(typeof(IComponent).IsAssignableFrom(requiredType),
-                            "Why is a component requiring a type that is not a component?");
+                        int requiredId = _lookup.Id(requiredType);
 
                         bool report = false;
                         if (!components.ContainsKey(requiredId))
@@ -236,7 +240,7 @@ namespace Bang.Entities
                             }
                         }
 
-                        Debug.Assert(!report,
+                        Guard.Check(!report,
                             $"Missing {requiredType.Name} required by {t.Name} in entity declaration!");
                     }
                 }
@@ -323,7 +327,12 @@ namespace Bang.Entities
         /// <typeparam name="T">Type that inherits <see cref="IComponent"/>.</typeparam>
         public T GetComponent<T>(int index) where T : IComponent
         {
-            Debug.Assert(HasComponent(index), $"The entity doesn't have a component of type '{typeof(T).Name}', maybe you should 'TryGetComponent'?");
+            if (!Guard.Check(HasComponent(index),
+                $"The entity doesn't have a component of type '{typeof(T).Name}', maybe you should 'TryGetComponent'?"))
+            {
+                return default!;
+            }
+
             return (T)GetComponentInternal(index);
         }
 
@@ -334,9 +343,9 @@ namespace Bang.Entities
         /// </summary>
         public PositionComponent GetPosition()
         {
-            Debug.Assert(HasComponent(BangComponentTypes.Position), 
+            Guard.Check(HasComponent(BangComponentTypes.Position),
                 $"The entity doesn't have a component of type '{nameof(PositionComponent)}', maybe you should 'TryGetComponent'?");
-            
+
             return _position;
         }
 
@@ -348,9 +357,9 @@ namespace Bang.Entities
         /// </returns>
         public bool AddComponentOnce<T>() where T : IComponent, new()
         {
-            if (_lookup is null || HasComponent<T>())
+            if (!Guard.Check(_lookup is not null, "Method not implemented for unitialized components.") ||
+                HasComponent<T>())
             {
-                Debug.Assert(_lookup is not null, "Method not implemented for unitialized components.");
                 return false;
             }
 
@@ -369,7 +378,11 @@ namespace Bang.Entities
         /// <param name="t">Type of the component.</param>
         public void AddComponent(IComponent c, Type t)
         {
-            Debug.Assert(typeof(IComponent).IsAssignableFrom(t));
+            if (!Guard.Check(typeof(IComponent).IsAssignableFrom(t), $"{t.Name} is not a component type."))
+            {
+                return;
+            }
+
             AddComponent(c, GetComponentIndex(t));
         }
 
@@ -401,7 +414,11 @@ namespace Bang.Entities
         /// <param name="t">Type of the component.</param>
         public void RemoveComponent(Type t)
         {
-            Debug.Assert(typeof(IComponent).IsAssignableFrom(t));
+            if (!Guard.Check(typeof(IComponent).IsAssignableFrom(t), $"{t.Name} is not a component type."))
+            {
+                return;
+            }
+
             RemoveComponent(GetComponentIndex(t));
         }
 
@@ -425,7 +442,11 @@ namespace Bang.Entities
         /// <param name="forceReplace">Whether the component will be forcefully replaced.</param>
         public void ReplaceComponent(IComponent c, Type t, bool forceReplace = false)
         {
-            Debug.Assert(typeof(IComponent).IsAssignableFrom(t));
+            if (!Guard.Check(typeof(IComponent).IsAssignableFrom(t), $"{t.Name} is not a component type."))
+            {
+                return;
+            }
+
             ReplaceComponent(c, GetComponentIndex(t), forceReplace);
         }
 
@@ -487,7 +508,7 @@ namespace Bang.Entities
         /// <summary>
         /// Checks whether an entity has a component.
         /// </summary>
-        public bool HasComponent(int index) => index < _availableComponents.Length && _availableComponents[index];
+        public bool HasComponent(int index) => index >= 0 && index < _availableComponents.Length && _availableComponents[index];
 
         /// <summary>
         /// Checks whether an entity has a data attached to -- component or message.
@@ -498,7 +519,11 @@ namespace Bang.Entities
 
         private int GetComponentIndex(Type t)
         {
-            Debug.Assert(_lookup is not null, "Why are we modifying an entity without setting it to the world?");
+            if (!Guard.Check(_lookup is not null, "Why are we modifying an entity without setting it to the world?"))
+            {
+                return -1;
+            }
+
             return _lookup.Id(t);
         }
 
@@ -562,6 +587,11 @@ namespace Bang.Entities
         /// </summary>
         public bool AddComponent<T>(T c, int index) where T : IComponent
         {
+            if (!Guard.Check(index >= 0, "Cannot add a component with an invalid component index."))
+            {
+                return false;
+            }
+
             if (IsDestroyed)
             {
                 // TODO: Assert? The entity has been destroyed, so it's a no-op.
@@ -691,8 +721,11 @@ namespace Bang.Entities
         /// </summary>
         private void NotifyAndSubscribeOnComponentAdded(int index, IComponent c)
         {
-            Debug.Assert(_world is not null);
-            Debug.Assert(_lookup is not null);
+            if (!Guard.Check(_world is not null, "Notifying a component added on an entity without a world.") ||
+                !Guard.Check(_lookup is not null, "Notifying a component added on an entity without a lookup."))
+            {
+                return;
+            }
 
             (c as IStateMachineComponent)?.Initialize(_world, this);
             (c as IModifiableComponent)?.Subscribe(GetModifiableComponentCallback(index));
@@ -722,8 +755,11 @@ namespace Bang.Entities
         /// </summary>
         private void NotifyOnComponentReplaced(int index, IComponent c)
         {
-            Debug.Assert(_world is not null);
-            Debug.Assert(_lookup is not null);
+            if (!Guard.Check(_world is not null, "Notifying a component replaced on an entity without a world.") ||
+                !Guard.Check(_lookup is not null, "Notifying a component replaced on an entity without a lookup."))
+            {
+                return;
+            }
 
             // First, subscribe to the newly replaced component.
             (c as IStateMachineComponent)?.Initialize(_world, this);
@@ -1007,4 +1043,4 @@ namespace Bang.Entities
         }
 
     }
-}
+}

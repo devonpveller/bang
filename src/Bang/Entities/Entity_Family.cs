@@ -1,4 +1,5 @@
 ﻿using Bang.Components;
+using Bang.Diagnostics;
 using System.Collections.Immutable;
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
@@ -86,7 +87,7 @@ namespace Bang.Entities
         /// <returns>Child entity, if any.</returns>
         public Entity? TryFetchChild(int id)
         {
-            Debug.Assert(_children is not null && _children.ContainsKey(id),
+            Guard.Check(_children is not null && _children.ContainsKey(id),
                 "Why are we fetching a child entity that is not a child?");
 
             return _world?.TryGetEntity(id);
@@ -165,7 +166,10 @@ namespace Bang.Entities
         /// <param name="name">Name of the child (if none, null).</param>
         public void AddChild(int id, string? name = default)
         {
-            Debug.Assert(_world is not null);
+            if (!Guard.Check(_world is not null, "Adding a child to an entity without a world."))
+            {
+                return;
+            }
 
             if (_children is not null && _children.ContainsKey(id))
             {
@@ -181,7 +185,7 @@ namespace Bang.Entities
             {
                 _childrenPerName ??= new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
 
-                Debug.Assert(!_childrenPerName.ContainsKey(name), "Duplicate child name!");
+                Guard.Check(!_childrenPerName.ContainsKey(name), "Duplicate child name!");
                 _childrenPerName[name] = id;
             }
 
@@ -273,7 +277,10 @@ namespace Bang.Entities
         /// </summary>
         public void RemoveChild(int id)
         {
-            Debug.Assert(_world is not null);
+            if (!Guard.Check(_world is not null, "Removing a child from an entity without a world."))
+            {
+                return;
+            }
 
             if (_children is null)
             {
@@ -313,7 +320,11 @@ namespace Bang.Entities
         /// </summary>
         public void Reparent(Entity parent)
         {
-            Debug.Assert(_lookup is not null);
+            if (!Guard.Check(_lookup is not null, "Reparenting an entity without a lookup."))
+            {
+                return;
+            }
+
             InitializeFamilyDelegates();
 
             if (parent == _parent)
@@ -366,7 +377,11 @@ namespace Bang.Entities
         /// </summary>
         public void Unparent()
         {
-            Debug.Assert(_lookup is not null);
+            if (!Guard.Check(_lookup is not null, "Unparenting an entity without a lookup."))
+            {
+                return;
+            }
+
             InitializeFamilyDelegates();
 
             if (_parent is null) return;
@@ -391,11 +406,15 @@ namespace Bang.Entities
 
         private void OnParentModified(int index, IComponent c)
         {
-            Debug.Assert(index == GetComponentIndex(c.GetType()));
+            if (!Guard.Check(index == GetComponentIndex(c.GetType()),
+                "The modified parent component does not match the tracked component index."))
+            {
+                return;
+            }
 
             IParentRelativeComponent? relativeComponent = GetComponentInternal(index) as IParentRelativeComponent;
 
-            Debug.Assert(relativeComponent is not null, "How is one of the relative components null?");
+            Guard.Check(relativeComponent is not null, "How is one of the relative components null?");
             relativeComponent?.OnParentModified(c, this);
         }
 
@@ -409,4 +428,4 @@ namespace Bang.Entities
             _onParentModifiedCache = OnParentModified;
         }
     }
-}
+}
