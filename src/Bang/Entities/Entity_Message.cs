@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using System.Collections.Immutable;
 using System.Diagnostics;
 
@@ -57,7 +58,11 @@ namespace Bang.Entities
         /// </summary>
         public void SendMessage<T>(int index, T message) where T : IMessage
         {
-            Debug.Assert(_world is not null);
+            if (_world is null)
+            {
+                Guard.Check(false, "Entity has no world to send a message through.");
+                return;
+            }
 
             _messages.Add(index);
 

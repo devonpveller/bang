@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using Bang.Entities;
 using Bang.Util;
 using System.Collections.Immutable;
@@ -32,7 +33,10 @@ namespace Bang.Contexts
             List<int> builder = [];
             foreach (Type t in targetMessages)
             {
-                Debug.Assert(typeof(IMessage).IsAssignableFrom(t));
+                if (!Guard.Check(typeof(IMessage).IsAssignableFrom(t), $"{t} is not an IMessage, skipping it."))
+                {
+                    continue;
+                }
 
                 int id = world.ComponentsLookup.Id(t);
                 builder.Add(id);
@@ -49,7 +53,10 @@ namespace Bang.Contexts
 
         internal void SubscribeToContext(Context context)
         {
-            Debug.Assert(_contextSubscribed == -1);
+            if (!Guard.Check(_contextSubscribed == -1, $"Watcher is already subscribed to context {_contextSubscribed}."))
+            {
+                return;
+            }
 
             context.OnMessageSentForEntityInContext += _onMessageSentCache;
             _contextSubscribed = context.Id;

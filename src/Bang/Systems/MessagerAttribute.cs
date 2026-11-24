@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using System.Diagnostics;
 
 namespace Bang.Systems
@@ -21,13 +22,10 @@ namespace Bang.Systems
         /// <param name="types">Messages that will be fired to this system.</param>
         public MessagerAttribute(params Type[] types)
         {
-            if (World.DIAGNOSTICS_MODE)
+            foreach (Type t in types)
             {
-                foreach (Type t in types)
-                {
-                    Debug.Assert(t.IsValueType || t == typeof(IMessage),
-                        "Why are we adding a watcher attribute for a non-struct? This won't be notified when the value changes.");
-                }
+                Guard.Check(t.IsValueType || t == typeof(IMessage),
+                    $"Why are we adding a messager attribute for non-struct {t}? This won't be notified when the value changes.");
             }
 
             Types = types;

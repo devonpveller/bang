@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using Bang.Entities;
 using Bang.Interactions;
 using Bang.StateMachines;
@@ -56,8 +57,8 @@ namespace Bang
         /// <param name="t">Type.</param>
         public int Id(Type t)
         {
-            Debug.Assert(typeof(IComponent).IsAssignableFrom(t) || typeof(IMessage).IsAssignableFrom(t),
-                "Why are we receiving a type that is not an IComponent?");
+            Guard.Check(typeof(IComponent).IsAssignableFrom(t) || typeof(IMessage).IsAssignableFrom(t),
+                $"Why are we receiving a type that is not an IComponent? Got {t}.");
 
             int index;
 
@@ -106,7 +107,7 @@ namespace Bang
             }
             else
             {
-                Debug.Assert(t != typeof(IComponent), "Why are we doing a lookup for an IComponent itself?");
+                Guard.Check(t != typeof(IComponent), "Why are we doing a lookup for an IComponent itself?");
             }
 
             if (id is null)

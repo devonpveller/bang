@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using Bang.Entities;
 using Bang.Systems;
 using Bang.Util;
@@ -107,7 +108,11 @@ namespace Bang.Contexts
         {
             get
             {
-                Debug.Assert(_entities.Count != 0, "Getting an entity without one available. This will crash!");
+                if (!Guard.Check(_entities.Count != 0, "Getting an entity without one available."))
+                {
+                    throw new InvalidOperationException("The context has no entity available.");
+                }
+
                 return _entities.First().Value;
             }
         }
@@ -531,8 +536,8 @@ namespace Bang.Contexts
             }
             else
             {
-                Debug.Assert(!_entities.ContainsKey(e.EntityId),
-                    "Why is a deactivate entity is in the collection?");
+                Guard.Check(!_entities.ContainsKey(e.EntityId),
+                    $"Why is a deactivated entity {e.EntityId} in the collection?");
 
                 _deactivatedEntities.Remove(e.EntityId);
             }

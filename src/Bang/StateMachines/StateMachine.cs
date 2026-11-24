@@ -1,4 +1,5 @@
-﻿using Bang.Components;
+﻿using Bang.Diagnostics;
+using Bang.Components;
 using Bang.Entities;
 using System;
 using System.Diagnostics;
@@ -129,7 +130,7 @@ namespace Bang.StateMachines
         [MemberNotNull(nameof(Entity))]
         internal virtual void Initialize(World world, Entity e)
         {
-            Debug.Assert(Routine is not null, "Have you called State() before starting this state machine?");
+            Guard.Check(Routine is not null, "Have you called State() before starting this state machine?");
 
             (World, Entity) = (world, e);
 
@@ -196,7 +197,11 @@ namespace Bang.StateMachines
         /// </summary>
         internal bool Tick(float dt)
         {
-            Debug.Assert(World is not null && Entity is not null, "Why are we ticking before starting first?");
+            if (World is null || Entity is null)
+            {
+                Guard.Check(false, "Why are we ticking before starting first?");
+                return false;
+            }
 
             if (_waitTime is not null)
             {
@@ -295,7 +300,7 @@ namespace Bang.StateMachines
         {
             if (Routine is null)
             {
-                Debug.Assert(Routine is not null, "Have you called State() before ticking this state machine?");
+                Guard.Check(false, "Have you called State() before ticking this state machine?");
 
                 // Instead of embarrassingly crashing, send a stop wait message.
                 return Wait.Stop;

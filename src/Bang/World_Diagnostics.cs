@@ -50,8 +50,10 @@ public partial class World
     /// </summary>
     protected void InitializeDiagnosticsCounters()
     {
-        Debug.Assert(DIAGNOSTICS_MODE,
-            "Why are we initializing diagnostics out of diagnostic mode?");
+        if (!Guard.Check(DIAGNOSTICS_MODE, "Why are we initializing diagnostics out of diagnostic mode?"))
+        {
+            return;
+        }
 
         if (_initializedDiagnostics)
         {

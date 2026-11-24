@@ -372,8 +372,8 @@ namespace Bang
         /// </summary>
         internal World AddEntity(Entity entity)
         {
-            Debug.Assert(!_entities.ContainsKey(entity.EntityId), $"Adding an entity for the same id {entity.EntityId}?");
-            
+            Guard.Check(!_entities.ContainsKey(entity.EntityId), $"Adding an entity for the same id {entity.EntityId}?");
+
             _entities[entity.EntityId] = entity;
 
             // Track end of the entity lifetime.
@@ -508,7 +508,10 @@ namespace Bang
                 return;
             }
 
-            Debug.Assert(_entities.ContainsKey(id), "Why are we removing an entity that has never been added?");
+            if (!Guard.Check(_entities.ContainsKey(id), $"Why are we removing entity {id} that has never been added?"))
+            {
+                return;
+            }
 
             _entities[id]?.Dispose();
             _entities.Remove(id);
@@ -522,12 +525,12 @@ namespace Bang
         {
             if (_deactivatedEntities.TryGetValue(id, out Entity? e))
             {
-                Debug.Assert(!_entities.ContainsKey(id), $"Activating an entity already active at {id}?");
+                Guard.Check(!_entities.ContainsKey(id), $"Activating an entity already active at {id}?");
 
                 _entities[id] = e;
                 _deactivatedEntities.Remove(id);
 
-                Debug.Assert(!e.IsDeactivated, $"Entity {id} should have been activated when calling this.");
+                Guard.Check(!e.IsDeactivated, $"Entity {id} should have been activated when calling this.");
                 return true;
             }
 
@@ -542,12 +545,12 @@ namespace Bang
         {
             if (_entities.TryGetValue(id, out Entity? e))
             {
-                Debug.Assert(!_deactivatedEntities.ContainsKey(id), $"Deactivating an entity already deactivated at {id}?");
+                Guard.Check(!_deactivatedEntities.ContainsKey(id), $"Deactivating an entity already deactivated at {id}?");
 
                 _deactivatedEntities[id] = e;
                 _entities.Remove(id);
 
-                Debug.Assert(e.IsDeactivated, $"Entity {id} should have been deactivated when calling this.");
+                Guard.Check(e.IsDeactivated, $"Entity {id} should have been deactivated when calling this.");
                 return true;
             }
 
@@ -565,7 +568,7 @@ namespace Bang
                 return entity;
             }
 
-            Debug.Assert(_entities.ContainsKey(id), $"Expected to have entity with id: {id}.");
+            Guard.Check(_entities.ContainsKey(id), $"Expected to have entity with id: {id}.");
 
             return _entities[id];
         }
@@ -1024,14 +1027,10 @@ namespace Bang
 
             // We expect more than one entity if the remaining ones have been destroyed
 
-            if (DIAGNOSTICS_MODE)
+            if (context.Entities.Length > 1)
             {
-                int nonDestroyedCount = 0;
-                if (context.Entities.Length > 1)
-                {
-                    nonDestroyedCount = context.Entities.Where(e => !e.IsDestroyed).Count();
-                    Debug.Assert(nonDestroyedCount <= 1, "Why are there more than one entity with an unique component?");
-                }
+                int nonDestroyedCount = context.Entities.Count(e => !e.IsDestroyed);
+                Guard.Check(nonDestroyedCount <= 1, "Why are there more than one entity with an unique component?");
             }
 
             // Avoid LINQ here: this is the canonical singleton accessor and runs on hot paths.
@@ -1592,8 +1591,8 @@ namespace Bang
         {
             if (system is not IReactiveSystem)
             {
-                Debug.Assert(!Attribute.IsDefined(system.GetType(), typeof(WatchAttribute)),
-                    "Watch attribute for a non-reactive system. Attribute will be dropped.");
+                Guard.Check(!Attribute.IsDefined(system.GetType(), typeof(WatchAttribute)),
+                    $"Watch attribute on non-reactive system {system.GetType()}. Attribute will be dropped.");
                 yield break;
             }
 
@@ -1611,8 +1610,8 @@ namespace Bang
         {
             if (system is not IMessagerSystem)
             {
-                Debug.Assert(!Attribute.IsDefined(system.GetType(), typeof(MessagerAttribute)),
-                    "Messager attribute for a non-messager system. Attribute will be dropped.");
+                Guard.Check(!Attribute.IsDefined(system.GetType(), typeof(MessagerAttribute)),
+                    $"Messager attribute on non-messager system {system.GetType()}. Attribute will be dropped.");
                 return default;
             }
 
