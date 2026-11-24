@@ -428,4 +428,4 @@ namespace Bang.Entities
             _onParentModifiedCache = OnParentModified;
         }
     }
-}
+}

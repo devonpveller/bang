@@ -1043,4 +1043,4 @@ namespace Bang.Entities
         }
 
     }
-}
+}
