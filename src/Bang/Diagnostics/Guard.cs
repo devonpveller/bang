@@ -50,6 +50,12 @@ namespace Bang.Diagnostics
             return condition;
         }
 
+        /// <summary>
+        /// Reports a violated invariant unconditionally. Prefer this over <see cref="Check(bool, string, string?)"/>
+        /// when the caller needs its own null test, so the compiler sees the null check and narrows the value.
+        /// </summary>
+        public static void Fail(string message, [CallerMemberName] string? caller = null) => Report(caller, message);
+
         private static void Report(string? caller, string message)
         {
             string full = $"[Bang] {caller}: {message}";

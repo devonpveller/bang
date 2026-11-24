@@ -67,8 +67,6 @@ namespace Bang.Entities
         /// <summary>
         /// Components lookup. Unique per world that the entity was created.
         /// </summary>
-        // _world and _lookup are never null: the only constructor assigns both from a non-null world and they are readonly.
-        // Do not guard them with `is not null` checks; the compiler then treats them as maybe-null for the rest of the method.
         private readonly World _world;
 
         private readonly ComponentsLookup _lookup;
@@ -359,6 +357,12 @@ namespace Bang.Entities
         /// </returns>
         public bool AddComponentOnce<T>() where T : IComponent, new()
         {
+            if (_lookup is null)
+            {
+                Guard.Fail("Method not implemented for unitialized components.");
+                return false;
+            }
+
             if (HasComponent<T>())
             {
                 return false;
@@ -520,6 +524,12 @@ namespace Bang.Entities
 
         private int GetComponentIndex(Type t)
         {
+            if (_lookup is null)
+            {
+                Guard.Fail("Why are we modifying an entity without setting it to the world?");
+                return -1;
+            }
+
             return _lookup.Id(t);
         }
 
@@ -717,6 +727,18 @@ namespace Bang.Entities
         /// </summary>
         private void NotifyAndSubscribeOnComponentAdded(int index, IComponent c)
         {
+            if (_world is null)
+            {
+                Guard.Fail("Notifying a component added on an entity without a world.");
+                return;
+            }
+
+            if (_lookup is null)
+            {
+                Guard.Fail("Notifying a component added on an entity without a lookup.");
+                return;
+            }
+
             (c as IStateMachineComponent)?.Initialize(_world, this);
             (c as IModifiableComponent)?.Subscribe(GetModifiableComponentCallback(index));
 
@@ -745,6 +767,18 @@ namespace Bang.Entities
         /// </summary>
         private void NotifyOnComponentReplaced(int index, IComponent c)
         {
+            if (_world is null)
+            {
+                Guard.Fail("Notifying a component replaced on an entity without a world.");
+                return;
+            }
+
+            if (_lookup is null)
+            {
+                Guard.Fail("Notifying a component replaced on an entity without a lookup.");
+                return;
+            }
+
             // First, subscribe to the newly replaced component.
             (c as IStateMachineComponent)?.Initialize(_world, this);
             (c as IModifiableComponent)?.Subscribe(GetModifiableComponentCallback(index));
